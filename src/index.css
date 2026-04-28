@@ -1,0 +1,197 @@
+:root {
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #fff;
+  --border: #e5e4e7;
+  --code-bg: #f4f3ec;
+  --accent: #aa3bff;
+  --accent-bg: rgba(170, 59, 255, 0.1);
+  --accent-border: rgba(170, 59, 255, 0.5);
+  --social-bg: rgba(244, 243, 236, 0.5);
+  --shadow:
+    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+  /* Dashboard tokens */
+  --font-mono: ui-monospace, Consolas, monospace;
+  --border-radius-md: 6px;
+  --border-radius-lg: 10px;
+
+  --color-background-primary: #ffffff;
+  --color-background-secondary: #f5f5f7;
+  --color-border-tertiary: #e5e4e7;
+
+  --color-text-primary: #08060d;
+  --color-text-secondary: #6b6375;
+
+  --color-background-success: #eaf3de;
+  --color-text-success: #27500a;
+
+  --color-background-danger: #fcebeb;
+  --color-text-danger: #791f1f;
+  --color-border-danger: #e24b4a;
+
+  --color-background-warning: #faeeda;
+  --color-text-warning: #633806;
+
+  --color-background-info: rgba(170, 59, 255, 0.1);
+  --color-text-info: #7a1fd6;
+
+  font: 18px/145% var(--sans);
+  letter-spacing: 0.18px;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #9ca3af;
+    --text-h: #f3f4f6;
+    --bg: #16171d;
+    --border: #2e303a;
+    --code-bg: #1f2028;
+    --accent: #c084fc;
+    --accent-bg: rgba(192, 132, 252, 0.15);
+    --accent-border: rgba(192, 132, 252, 0.5);
+    --social-bg: rgba(47, 48, 58, 0.5);
+    --shadow:
+      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+
+    /* Dashboard tokens dark */
+    --color-background-primary: #1a1b23;
+    --color-background-secondary: #22232e;
+    --color-border-tertiary: #2e303a;
+
+    --color-text-primary: #f3f4f6;
+    --color-text-secondary: #9ca3af;
+
+    --color-background-success: #1a2e10;
+    --color-text-success: #86efac;
+
+    --color-background-danger: #2e1010;
+    --color-text-danger: #fca5a5;
+    --color-border-danger: #e24b4a;
+
+    --color-background-warning: #2e1f0a;
+    --color-text-warning: #fcd34d;
+
+    --color-background-info: rgba(192, 132, 252, 0.15);
+    --color-text-info: #c084fc;
+  }
+
+  #social .button-icon {
+    filter: invert(1) brightness(2);
+  }
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  width: 1126px;
+  max-width: 100%;
+  margin: 0 auto;
+  text-align: left;
+  border-inline: 1px solid var(--border);
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+input[type="text"],
+input[type="password"] {
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-primary);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-family: var(--sans);
+  outline: none;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+button {
+  padding: 7px 14px;
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-family: var(--sans);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+button:hover:not(:disabled) {
+  background: var(--border);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+h1,
+h2 {
+  font-family: var(--heading);
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+h1 {
+  font-size: 56px;
+  letter-spacing: -1.68px;
+  margin: 32px 0;
+  @media (max-width: 1024px) {
+    font-size: 36px;
+    margin: 20px 0;
+  }
+}
+h2 {
+  font-size: 24px;
+  line-height: 118%;
+  letter-spacing: -0.24px;
+  margin: 0 0 8px;
+  @media (max-width: 1024px) {
+    font-size: 20px;
+  }
+}
+p {
+  margin: 0;
+}
+
+code,
+.counter {
+  font-family: var(--mono);
+  display: inline-flex;
+  border-radius: 4px;
+  color: var(--text-h);
+}
+
+code {
+  font-size: 15px;
+  line-height: 135%;
+  padding: 4px 8px;
+  background: var(--code-bg);
+}
