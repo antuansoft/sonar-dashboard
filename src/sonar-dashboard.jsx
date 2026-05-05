@@ -78,14 +78,15 @@ function GateBadge({ status }) {
 
 function RatingBadge({ value }) {
   if (!value) return <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>—</span>;
-  const c = RATING_COLOR[value] || RATING_COLOR["5"];
+  const key = String(Math.round(parseFloat(value)));
+  const c = RATING_COLOR[key] || RATING_COLOR["5"];
   return (
     <span style={{
       background: c.bg, color: c.text, border: `0.5px solid ${c.border}`,
       fontSize: 11, fontWeight: 500, padding: "1px 7px",
       borderRadius: "var(--border-radius-md)", fontFamily: "var(--font-mono)"
     }}>
-      {RATING_LABEL[value]}
+      {RATING_LABEL[key]}
     </span>
   );
 }
