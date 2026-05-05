@@ -37,11 +37,32 @@ function fmtTotal(n) {
   return String(n);
 }
 
+function fmtRelative(dateStr) {
+  if (!dateStr) return "—";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "ahora";
+  if (mins < 60) return `hace ${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `hace ${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `hace ${days}d`;
+  return new Date(dateStr).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "2-digit" });
+}
+
+function fmtDuration(ms) {
+  if (!ms) return "";
+  if (ms < 1000) return `${ms}ms`;
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
 function GateBadge({ status }) {
   const cfg = {
-    OK: { bg: "var(--color-background-success)", color: "var(--color-text-success)", label: "Passed" },
-    ERROR: { bg: "var(--color-background-danger)", color: "var(--color-text-danger)", label: "Failed" },
-    WARN: { bg: "var(--color-background-warning)", color: "var(--color-text-warning)", label: "Warning" },
+    OK:    { bg: "var(--color-background-success)", color: "var(--color-text-success)", label: "Passed" },
+    ERROR: { bg: "var(--color-background-danger)",  color: "var(--color-text-danger)",  label: "Failed" },
+    WARN:  { bg: "var(--color-background-warning)", color: "var(--color-text-warning)", label: "Warning" },
   }[status] || { bg: "var(--color-background-secondary)", color: "var(--color-text-secondary)", label: "—" };
 
   return (
@@ -99,7 +120,180 @@ function MetricCell({ value, metric, label }) {
   );
 }
 
-function ProjectCard({ project, m }) {
+function TaskStatusIcon({ status }) {
+  const cfg = {
+    SUCCESS:  { symbol: "✓", color: "var(--color-text-success)" },
+    FAILED:   { symbol: "✗", color: "var(--color-text-danger)" },
+    CANCELED: { symbol: "○", color: "var(--color-text-secondary)" },
+  }[status] || { symbol: "·", color: "var(--color-text-secondary)" };
+  return <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color, flexShrink: 0 }}>{cfg.symbol}</span>;
+}
+
+function AnalysisPanel({ branches = [], tasks = [], prs = [], analysisQG = {} }) {
+  const mainBranchName = branches.find(b => b.isMain)?.name;
+  // Cuando un análisis es de PR, ce/activity no devuelve 'branch' sino 'pullRequest' (nº de PR).
+  // Este mapa permite resolver el nombre de la rama a partir del número de PR.
+  const prBranchByKey = Object.fromEntries(prs.map(p => [String(p.key), p.branch]));
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: "0.5px solid var(--color-border-tertiary)" }}>
+
+      {branches.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{
+            fontSize: 11, color: "var(--color-text-secondary)",
+            textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 7
+          }}>
+            Ramas analizadas ({branches.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {branches.map(br => (
+              <div key={br.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                    background: br.isMain ? "var(--color-text-info)" : "var(--color-border-secondary)"
+                  }} />
+                  <span style={{
+                    fontSize: 12, fontFamily: "var(--font-mono)",
+                    color: br.isMain ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+                  }}>
+                    {br.name}
+                  </span>
+                  {br.isMain && (
+                    <span style={{
+                      fontSize: 9, padding: "1px 5px", borderRadius: 3,
+                      background: "var(--color-background-info)", color: "var(--color-text-info)",
+                      flexShrink: 0
+                    }}>
+                      principal
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <GateBadge status={br.status?.qualityGateStatus} />
+                  <span style={{ fontSize: 11, color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+                    {fmtRelative(br.analysisDate)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pull Requests */}
+      {prs.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{
+            fontSize: 11, color: "var(--color-text-secondary)",
+            textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 7
+          }}>
+            Pull Requests ({prs.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {prs.map(pr => (
+              <div key={pr.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <span style={{ fontSize: 11, color: "var(--color-text-secondary)", flexShrink: 0 }}>
+                    #{pr.key}
+                  </span>
+                  <span style={{
+                    fontSize: 12, fontFamily: "var(--font-mono)",
+                    color: "var(--color-text-secondary)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+                  }}>
+                    {pr.branch}
+                  </span>
+                  <span style={{ fontSize: 10, color: "var(--color-text-secondary)", flexShrink: 0 }}>
+                    → {pr.base}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <GateBadge status={pr.status?.qualityGateStatus} />
+                  <span style={{ fontSize: 11, color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+                    {fmtRelative(pr.analysisDate)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tasks.length > 0 && (
+        <div>
+          <div style={{
+            fontSize: 11, color: "var(--color-text-secondary)",
+            textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 7
+          }}>
+            Historial de análisis ({tasks.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {tasks.slice(0, 15).map(task => {
+              const branchLabel = task.branch || prBranchByKey[String(task.pullRequest)] || mainBranchName || "—";
+              const qgStatus = task.analysisId ? analysisQG[task.analysisId] : undefined;
+              return (
+                <div key={task.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <TaskStatusIcon status={task.status} />
+                    <span style={{
+                      fontSize: 11, fontFamily: "var(--font-mono)",
+                      color: "var(--color-text-secondary)",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+                    }}>
+                      {branchLabel}
+                    </span>
+                    {task.pullRequest && (
+                      <span style={{
+                        fontSize: 9, padding: "1px 4px", borderRadius: 3,
+                        background: "var(--color-background-secondary)", color: "var(--color-text-secondary)",
+                        flexShrink: 0, whiteSpace: "nowrap"
+                      }}>
+                        PR #{task.pullRequest}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+                    {qgStatus
+                      ? <GateBadge status={qgStatus} />
+                      : <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>—</span>
+                    }
+                    <span style={{ fontSize: 11, color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+                      {fmtRelative(task.completedAt || task.submittedAt)}
+                    </span>
+                    {task.executionTimeMs && (
+                      <>
+                        <span style={{ color: "var(--color-border-secondary)", fontSize: 11 }}>·</span>
+                        <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>
+                          {fmtDuration(task.executionTimeMs)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 8, fontSize: 10, color: "var(--color-text-secondary)", fontStyle: "italic" }}>
+            ✓ / ✗ = ejecución del análisis completada / fallida &nbsp;·&nbsp; Passed / Failed = resultado del Quality Gate
+          </div>
+        </div>
+      )}
+
+      {branches.length === 0 && tasks.length === 0 && prs.length === 0 && (
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", textAlign: "center", margin: "4px 0" }}>
+          Sin datos de análisis disponibles
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ProjectCard({ project, m, branches = [], tasks = [], prs = [], analysisQG = {} }) {
+  const [showAnalysis, setShowAnalysis] = useState(false);
+
   return (
     <div style={{
       background: "var(--color-background-primary)",
@@ -128,18 +322,30 @@ function ProjectCard({ project, m }) {
         <MetricCell value={m?.ncloc} metric="ncloc" label="Líneas" />
       </div>
 
-      <div style={{ display: "flex", gap: 12, paddingTop: 10, borderTop: "0.5px solid var(--color-border-tertiary)" }}>
-        {[
-          { key: "reliability_rating", label: "Reliability" },
-          { key: "security_rating", label: "Security" },
-          { key: "sqale_rating", label: "Maint." },
-        ].map(({ key, label }) => (
-          <div key={key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <RatingBadge value={m?.[key]} />
-            <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{label}</span>
-          </div>
-        ))}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 10, borderTop: "0.5px solid var(--color-border-tertiary)" }}>
+        <div style={{ display: "flex", gap: 12 }}>
+          {[
+            { key: "reliability_rating", label: "Reliability" },
+            { key: "security_rating", label: "Security" },
+            { key: "sqale_rating", label: "Maint." },
+          ].map(({ key, label }) => (
+            <div key={key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <RatingBadge value={m?.[key]} />
+              <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{label}</span>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => setShowAnalysis(v => !v)}
+          style={{ fontSize: 11, padding: "2px 8px", opacity: 0.75 }}
+        >
+          {showAnalysis
+            ? "Ocultar ▴"
+            : `Análisis${branches.length > 0 ? ` (${branches.length} rama${branches.length > 1 ? "s" : ""}${prs.length > 0 ? `, ${prs.length} PR` : ""})` : ""} ▾`}
+        </button>
       </div>
+
+      {showAnalysis && <AnalysisPanel branches={branches} tasks={tasks} prs={prs} analysisQG={analysisQG} />}
     </div>
   );
 }
@@ -159,6 +365,10 @@ export default function SonarDashboard() {
   const [org, setOrg] = useState("");
   const [projects, setProjects] = useState([]);
   const [measures, setMeasures] = useState({});
+  const [branches, setBranches] = useState({});
+  const [ceActivity, setCeActivity] = useState({});
+  const [pullRequests, setPullRequests] = useState({});
+  const [analysisQG, setAnalysisQG] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [connected, setConnected] = useState(false);
@@ -190,7 +400,83 @@ export default function SonarDashboard() {
           grouped[item.component][item.metric] = item.value;
         }
         setMeasures(grouped);
+
+        // Fetch branches, PRs and CE activity for each project in parallel
+        const branchMap = {};
+        const ceMap = {};
+        const prMap = {};
+        await Promise.all(comps.map(async (comp) => {
+          try {
+            const [brRes, ceRes, prRes] = await Promise.all([
+              fetch(`${API}/project_branches/list?project=${encodeURIComponent(comp.key)}`, { headers }),
+              fetch(`${API}/ce/activity?component=${encodeURIComponent(comp.key)}&ps=50`, { headers }),
+              fetch(`${API}/project_pull_requests/list?project=${encodeURIComponent(comp.key)}`, { headers }),
+            ]);
+            if (brRes.ok) {
+              const brJson = await brRes.json();
+              branchMap[comp.key] = brJson.branches || [];
+            }
+            if (ceRes.ok) {
+              const ceJson = await ceRes.json();
+              ceMap[comp.key] = ceJson.tasks || [];
+            }
+            if (prRes.ok) {
+              const prJson = await prRes.json();
+              prMap[comp.key] = prJson.pullRequests || [];
+            }
+          } catch {
+            // no bloquear si falla para un proyecto concreto
+          }
+        }));
+        setBranches(branchMap);
+        setCeActivity(ceMap);
+        setPullRequests(prMap);
+
+        // Segunda pasada: obtener QG por análisis usando project_analyses/search.
+        // Los eventos QG solo aparecen cuando el estado CAMBIA, así que propagamos
+        // el último estado conocido hacia adelante (de más antiguo a más reciente).
+        const qgMap = {};
+        await Promise.all(comps.map(async (comp) => {
+          const aMap = {};
+
+          const processAnalyses = (analyses) => {
+            const sorted = [...analyses].sort((a, b) => new Date(a.date) - new Date(b.date));
+            let lastQG = null;
+            for (const a of sorted) {
+              const qgEvt = a.events?.find(e => e.category === "QUALITY_GATE");
+              if (qgEvt) {
+                lastQG = ["Passed", "Fixed"].includes(qgEvt.name) ? "OK" : "ERROR";
+              }
+              if (lastQG) aMap[a.key] = lastQG;
+            }
+          };
+
+          const fetchAnalyses = async (params) => {
+            try {
+              const res = await fetch(
+                `${API}/project_analyses/search?project=${encodeURIComponent(comp.key)}&ps=100&${params}`,
+                { headers }
+              );
+              if (res.ok) processAnalyses((await res.json()).analyses || []);
+            } catch {}
+          };
+
+          await Promise.all([
+            ...(branchMap[comp.key] || []).map(br =>
+              br.isMain
+                ? fetchAnalyses("")
+                : fetchAnalyses(`branch=${encodeURIComponent(br.name)}`)
+            ),
+            ...(prMap[comp.key] || []).map(pr =>
+              fetchAnalyses(`pullRequest=${encodeURIComponent(pr.key)}`)
+            ),
+          ]);
+
+          qgMap[comp.key] = aMap;
+        }));
+        setAnalysisQG(qgMap);
       }
+
       setConnected(true);
     } catch (e) {
       setError(e.message);
@@ -201,7 +487,16 @@ export default function SonarDashboard() {
 
   const handleConnect = () => { if (token && org) load(token, org); };
 
-  const disconnect = () => { setConnected(false); setProjects([]); setMeasures({}); setError(null); };
+  const disconnect = () => {
+    setConnected(false);
+    setProjects([]);
+    setMeasures({});
+    setBranches({});
+    setCeActivity({});
+    setPullRequests({});
+    setAnalysisQG({});
+    setError(null);
+  };
 
   const filtered = projects.filter(p => {
     if (filter === "all") return true;
@@ -211,10 +506,10 @@ export default function SonarDashboard() {
     return true;
   });
 
-  const passCount = projects.filter(p => measures[p.key]?.alert_status === "OK").length;
-  const failCount = projects.filter(p => measures[p.key]?.alert_status === "ERROR").length;
+  const passCount  = projects.filter(p => measures[p.key]?.alert_status === "OK").length;
+  const failCount  = projects.filter(p => measures[p.key]?.alert_status === "ERROR").length;
   const totalLines = projects.reduce((acc, p) => acc + parseInt(measures[p.key]?.ncloc || 0), 0);
-  const totalBugs = projects.reduce((acc, p) => acc + parseInt(measures[p.key]?.bugs || 0), 0);
+  const totalBugs  = projects.reduce((acc, p) => acc + parseInt(measures[p.key]?.bugs || 0), 0);
 
   if (!connected) {
     return (
@@ -310,7 +605,7 @@ export default function SonarDashboard() {
       <div style={{ display: "flex", gap: 6, marginBottom: "1.25rem", alignItems: "center" }}>
         <span style={{ fontSize: 12, color: "var(--color-text-secondary)", marginRight: 4 }}>Filtrar:</span>
         {[
-          { key: "all", label: `Todos (${projects.length})` },
+          { key: "all",  label: `Todos (${projects.length})` },
           { key: "pass", label: `Passed (${passCount})` },
           { key: "fail", label: `Failed (${failCount})` },
         ].map(f => (
@@ -335,7 +630,15 @@ export default function SonarDashboard() {
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
           {filtered.map(proj => (
-            <ProjectCard key={proj.key} project={proj} m={measures[proj.key]} />
+            <ProjectCard
+              key={proj.key}
+              project={proj}
+              m={measures[proj.key]}
+              branches={branches[proj.key] || []}
+              tasks={ceActivity[proj.key] || []}
+              prs={pullRequests[proj.key] || []}
+              analysisQG={analysisQG[proj.key] || {}}
+            />
           ))}
         </div>
       )}
