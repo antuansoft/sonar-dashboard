@@ -5,7 +5,8 @@ const API = "/api";
 const METRICS = [
   "bugs", "vulnerabilities", "code_smells",
   "coverage", "duplicated_lines_density", "ncloc",
-  "alert_status", "reliability_rating", "security_rating", "sqale_rating"
+  "alert_status", "reliability_rating", "security_rating", "sqale_rating",
+  "security_hotspots", "security_hotspots_reviewed", "security_review_rating"
 ];
 
 const RATING_LABEL = { "1": "A", "2": "B", "3": "C", "4": "D", "5": "E" };
@@ -19,7 +20,7 @@ const RATING_COLOR = {
 
 function fmtNum(val, metric) {
   if (val === undefined || val === null || val === "") return "—";
-  if (metric === "coverage" || metric === "duplicated_lines_density") {
+  if (metric === "coverage" || metric === "duplicated_lines_density" || metric === "security_hotspots_reviewed") {
     return parseFloat(val).toFixed(1) + "%";
   }
   if (metric === "ncloc") {
@@ -76,31 +77,15 @@ function GateBadge({ status }) {
   );
 }
 
-function RatingBadge({ value }) {
-  if (!value) return <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>—</span>;
-  const c = RATING_COLOR[value] || RATING_COLOR["5"];
-  return (
-    <span style={{
-      background: c.bg, color: c.text, border: `0.5px solid ${c.border}`,
-      fontSize: 11, fontWeight: 500, padding: "1px 7px",
-      borderRadius: "var(--border-radius-md)", fontFamily: "var(--font-mono)"
-    }}>
-      {RATING_LABEL[value]}
-    </span>
-  );
-}
+function RatingCell({ ratingVal, mainVal, mainMetric, subVal, label }) {
+  const key = ratingVal ? String(Math.round(parseFloat(ratingVal))) : null;
+  const rc = key ? (RATING_COLOR[key] || RATING_COLOR["5"]) : null;
 
-function MetricCell({ value, metric, label }) {
-  const color = (() => {
-    if (!value || value === "—") return "var(--color-text-secondary)";
-    if (metric === "bugs" || metric === "vulnerabilities") {
-      const n = parseInt(value);
-      if (n === 0) return "var(--color-text-success)";
-      if (n <= 5) return "var(--color-text-warning)";
-      return "var(--color-text-danger)";
-    }
-    if (metric === "coverage") {
-      const n = parseFloat(value);
+  const valueColor = (() => {
+    if (rc) return rc.text;
+    if (mainMetric === "coverage") {
+      if (!mainVal || mainVal === "—") return "var(--color-text-secondary)";
+      const n = parseFloat(mainVal);
       if (n >= 80) return "var(--color-text-success)";
       if (n >= 50) return "var(--color-text-warning)";
       return "var(--color-text-danger)";
@@ -110,8 +95,24 @@ function MetricCell({ value, metric, label }) {
 
   return (
     <div style={{ background: "var(--color-background-secondary)", borderRadius: "var(--border-radius-md)", padding: "8px 10px" }}>
-      <div style={{ fontSize: 16, fontWeight: 500, color, fontFamily: "var(--font-mono)", marginBottom: 2 }}>
-        {fmtNum(value, metric)}
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3, flexWrap: "wrap" }}>
+        {key && (
+          <span style={{
+            background: rc.bg, color: rc.text, border: `0.5px solid ${rc.border}`,
+            fontSize: 10, fontWeight: 600, padding: "1px 5px",
+            borderRadius: "var(--border-radius-md)", fontFamily: "var(--font-mono)", flexShrink: 0
+          }}>
+            {RATING_LABEL[key]}
+          </span>
+        )}
+        <span style={{ fontSize: 15, fontWeight: 500, color: valueColor, fontFamily: "var(--font-mono)" }}>
+          {mainVal ?? "—"}
+        </span>
+        {subVal && (
+          <span style={{ fontSize: 10, color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+            {subVal} rev.
+          </span>
+        )}
       </div>
       <div style={{ fontSize: 11, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
         {label}
@@ -314,27 +315,20 @@ function ProjectCard({ project, m, branches = [], tasks = [], prs = [], analysis
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 12 }}>
-        <MetricCell value={m?.bugs} metric="bugs" label="Bugs" />
-        <MetricCell value={m?.vulnerabilities} metric="vulnerabilities" label="Vulns" />
-        <MetricCell value={m?.code_smells} metric="code_smells" label="Smells" />
-        <MetricCell value={m?.coverage} metric="coverage" label="Coverage" />
-        <MetricCell value={m?.duplicated_lines_density} metric="duplicated_lines_density" label="Duplic." />
-        <MetricCell value={m?.ncloc} metric="ncloc" label="Líneas" />
+        <RatingCell ratingVal={m?.security_rating}    mainVal={fmtNum(m?.vulnerabilities, "vulnerabilities")}           label="Security" />
+        <RatingCell ratingVal={m?.reliability_rating} mainVal={fmtNum(m?.bugs, "bugs")}                                  label="Reliability" />
+        <RatingCell ratingVal={m?.sqale_rating}       mainVal={fmtNum(m?.code_smells, "code_smells")}                    label="Maintainab." />
+        <RatingCell ratingVal={m?.security_review_rating}
+                    mainVal={fmtNum(m?.security_hotspots, "security_hotspots")}
+                    subVal={fmtNum(m?.security_hotspots_reviewed, "security_hotspots_reviewed")}                          label="Hotspots" />
+        <RatingCell mainVal={fmtNum(m?.coverage, "coverage")}                          mainMetric="coverage"             label="Coverage" />
+        <RatingCell mainVal={fmtNum(m?.duplicated_lines_density, "duplicated_lines_density")}                            label="Duplic." />
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 10, borderTop: "0.5px solid var(--color-border-tertiary)" }}>
-        <div style={{ display: "flex", gap: 12 }}>
-          {[
-            { key: "reliability_rating", label: "Reliability" },
-            { key: "security_rating", label: "Security" },
-            { key: "sqale_rating", label: "Maint." },
-          ].map(({ key, label }) => (
-            <div key={key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <RatingBadge value={m?.[key]} />
-              <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{label}</span>
-            </div>
-          ))}
-        </div>
+        <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
+          {fmtNum(m?.ncloc, "ncloc")} líneas de código
+        </span>
         <button
           onClick={() => setShowAnalysis(v => !v)}
           style={{ fontSize: 11, padding: "2px 8px", opacity: 0.75 }}
