@@ -208,7 +208,7 @@ function AnalysisPanel({ branches = [], tasks = [], prs = [], analysisQG = {} })
                     {pr.branch}
                   </span>
                   <span style={{ fontSize: 10, color: "var(--color-text-secondary)", flexShrink: 0 }}>
-                    → {pr.base}
+                    → {pr.target}
                   </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
@@ -456,11 +456,13 @@ export default function SonarDashboard() {
           };
 
           await Promise.all([
-            ...(branchMap[comp.key] || []).map(br =>
-              br.isMain
-                ? fetchAnalyses("")
-                : fetchAnalyses(`branch=${encodeURIComponent(br.name)}`)
-            ),
+            ...(branchMap[comp.key] || [])
+              .filter(br => br.isMain || br.type === "LONG")
+              .map(br =>
+                br.isMain
+                  ? fetchAnalyses("")
+                  : fetchAnalyses(`branch=${encodeURIComponent(br.name)}`)
+              ),
             ...(prMap[comp.key] || []).map(pr =>
               fetchAnalyses(`pullRequest=${encodeURIComponent(pr.key)}`)
             ),
