@@ -426,47 +426,47 @@ export default function SonarDashboard() {
         setCeActivity(ceMap);
         setPullRequests(prMap);
 
-        // Segunda pasada: obtener QG por análisis usando project_analyses/search.
-        // Los eventos QG solo aparecen cuando el estado CAMBIA, así que propagamos
-        // el último estado conocido hacia adelante (de más antiguo a más reciente).
+        // Segunda pasada: QG por análisis.
+        // Ramas LONG: correlacionar project_analyses/search (keys+fechas) con
+        //   measures/search_history (valor real de QG por análisis, sin depender de eventos de cambio).
+        // PRs: usar pr.status.qualityGateStatus directamente desde prMap.
         const qgMap = {};
         await Promise.all(comps.map(async (comp) => {
           const aMap = {};
+          const longBranches = (branchMap[comp.key] || []).filter(br => br.isMain || br.type === "LONG");
 
-          const processAnalyses = (analyses) => {
-            const sorted = [...analyses].sort((a, b) => new Date(a.date) - new Date(b.date));
-            let lastQG = null;
-            for (const a of sorted) {
-              const qgEvt = a.events?.find(e => e.category === "QUALITY_GATE");
-              if (qgEvt) {
-                lastQG = ["Passed", "Fixed"].includes(qgEvt.name) ? "OK" : "ERROR";
-              }
-              if (lastQG) aMap[a.key] = lastQG;
-            }
-          };
-
-          const fetchAnalyses = async (params) => {
+          await Promise.all(longBranches.map(async (br) => {
             try {
-              const res = await fetch(
-                `${API}/project_analyses/search?project=${encodeURIComponent(comp.key)}&ps=100&${params}`,
-                { headers }
-              );
-              if (res.ok) processAnalyses((await res.json()).analyses || []);
+              const branchParam = br.isMain ? "" : `&branch=${encodeURIComponent(br.name)}`;
+              const [analysesRes, historyRes] = await Promise.all([
+                fetch(`${API}/project_analyses/search?project=${encodeURIComponent(comp.key)}&ps=100${branchParam}`, { headers }),
+                fetch(`${API}/measures/search_history?component=${encodeURIComponent(comp.key)}&metrics=alert_status&ps=100${branchParam}`, { headers }),
+              ]);
+              if (!analysesRes.ok || !historyRes.ok) return;
+              const [analysesJson, historyJson] = await Promise.all([analysesRes.json(), historyRes.json()]);
+              const analyses = analysesJson.analyses || [];
+              const history = historyJson.measures?.[0]?.history || [];
+              const dateToKey = {};
+              for (const a of analyses) {
+                dateToKey[new Date(a.date).toISOString()] = a.key;
+              }
+              for (const h of history) {
+                if (!h.value) continue;
+                const key = dateToKey[new Date(h.date).toISOString()];
+                if (key) aMap[key] = h.value;
+              }
             } catch {}
-          };
+          }));
 
-          await Promise.all([
-            ...(branchMap[comp.key] || [])
-              .filter(br => br.isMain || br.type === "LONG")
-              .map(br =>
-                br.isMain
-                  ? fetchAnalyses("")
-                  : fetchAnalyses(`branch=${encodeURIComponent(br.name)}`)
-              ),
-            ...(prMap[comp.key] || []).map(pr =>
-              fetchAnalyses(`pullRequest=${encodeURIComponent(pr.key)}`)
-            ),
-          ]);
+          for (const pr of (prMap[comp.key] || [])) {
+            const qg = pr.status?.qualityGateStatus;
+            if (!qg || qg === "NONE") continue;
+            for (const task of (ceMap[comp.key] || [])) {
+              if (String(task.pullRequest) === String(pr.key) && task.analysisId) {
+                aMap[task.analysisId] = qg;
+              }
+            }
+          }
 
           qgMap[comp.key] = aMap;
         }));
