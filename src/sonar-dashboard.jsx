@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import ExcelJS from "exceljs";
 
 const API = "/api";
 
@@ -57,6 +58,135 @@ function fmtDuration(ms) {
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s}s`;
   return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+async function exportToExcel(projects, measures, org) {
+  const GREEN = "FFC8E6C9";
+  const RED = "FFFFCDD2";
+  const HEADER_BG = "FFE0E0E0";
+  const TITLE_BG = "FFD9D9D9";
+  const REPO_HEADER_BG = "FFFAD4D4";
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Sonar Dashboard";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Análisis");
+
+  sheet.columns = [
+    { width: 55 },
+    { width: 16 },
+    { width: 16 },
+    { width: 18 },
+    { width: 18 },
+    { width: 14 },
+    { width: 14 },
+  ];
+
+  sheet.mergeCells("B1:G1");
+  const titleCell = sheet.getCell("B1");
+  titleCell.value = "RESULTADO DEL ANALISIS";
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  titleCell.font = { bold: true, size: 12 };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TITLE_BG } };
+  sheet.getRow(1).height = 22;
+
+  const legends = [
+    "VALOR OPTIMO = A (0)\n✓ Verde → valor = 0 (no issues)\n✗ Rojo/ámbar → valor > 0",
+    "VALOR OPTIMO = A (0)\n✓ Verde → valor = 0 (no issues)\n✗ Rojo/ámbar → valor > 0",
+    "VALOR OPTIMO = A (0)\n✓ Verde → valor = 0 (no issues)\n✗ Rojo/ámbar → valor > 0",
+    "VALOR OPTIMO = 100%\n✓ Verde → 100%\n✗ Rojo → < 100%",
+    "VALOR OPTIMO = 100%\n✓ Verde → 100%\n✗ Rojo → < 100%",
+    "VALOR OPTIMO <= 3%\n✓ Verde → <= 3%\n✗ Rojo → > 3%",
+  ];
+  for (let i = 0; i < legends.length; i++) {
+    const cell = sheet.getCell(2, i + 2);
+    cell.value = legends[i];
+    cell.alignment = { horizontal: "left", vertical: "top", wrapText: true };
+    cell.font = { size: 8 };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_BG } };
+  }
+  sheet.getRow(2).height = 60;
+
+  const headers = ["REPOSITORIO", "SECURITY", "RELIABILITY", "MAINTAINABILITY", "HOTSPOT", "COVERAGE", "DUPLICATIONS"];
+  const headerRow = sheet.getRow(4);
+  headers.forEach((h, idx) => {
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = h;
+    cell.font = { bold: true, size: 11 };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: REPO_HEADER_BG } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = {
+      top: { style: "thin" }, bottom: { style: "thin" },
+      left: { style: "thin" }, right: { style: "thin" },
+    };
+  });
+  headerRow.height = 24;
+
+  const fillFor = (color) => ({ type: "pattern", pattern: "solid", fgColor: { argb: color } });
+  const thinBorder = {
+    top: { style: "thin" }, bottom: { style: "thin" },
+    left: { style: "thin" }, right: { style: "thin" },
+  };
+
+  projects.forEach((proj, idx) => {
+    const m = measures[proj.key] || {};
+    const row = sheet.getRow(5 + idx);
+
+    const has = (v) => v !== undefined && v !== null && v !== "";
+    const vulns = has(m.vulnerabilities) ? parseInt(m.vulnerabilities) : null;
+    const bugs = has(m.bugs) ? parseInt(m.bugs) : null;
+    const smells = has(m.code_smells) ? parseInt(m.code_smells) : null;
+    const hotspots = has(m.security_hotspots) ? parseInt(m.security_hotspots) : null;
+    const reviewed = has(m.security_hotspots_reviewed) ? parseFloat(m.security_hotspots_reviewed) : null;
+    const coverage = has(m.coverage) ? parseFloat(m.coverage) : null;
+    const duplications = has(m.duplicated_lines_density) ? parseFloat(m.duplicated_lines_density) : null;
+
+    row.getCell(1).value = proj.key;
+
+    if (vulns === null) row.getCell(2).value = "—";
+    else { row.getCell(2).value = vulns; row.getCell(2).fill = fillFor(vulns === 0 ? GREEN : RED); }
+
+    if (bugs === null) row.getCell(3).value = "—";
+    else { row.getCell(3).value = bugs; row.getCell(3).fill = fillFor(bugs === 0 ? GREEN : RED); }
+
+    if (smells === null) row.getCell(4).value = "—";
+    else { row.getCell(4).value = smells; row.getCell(4).fill = fillFor(smells === 0 ? GREEN : RED); }
+
+    if (hotspots === null && reviewed === null) {
+      row.getCell(5).value = "—";
+    } else {
+      const pct = reviewed === null ? "—" : reviewed.toFixed(1) + "%";
+      row.getCell(5).value = `${hotspots ?? 0} (${pct})`;
+      const ok = (hotspots ?? 0) === 0 || reviewed === 100;
+      row.getCell(5).fill = fillFor(ok ? GREEN : RED);
+    }
+
+    if (coverage === null) row.getCell(6).value = "—";
+    else { row.getCell(6).value = coverage.toFixed(1) + "%"; row.getCell(6).fill = fillFor(coverage === 100 ? GREEN : RED); }
+
+    if (duplications === null) row.getCell(7).value = "—";
+    else { row.getCell(7).value = duplications.toFixed(1) + "%"; row.getCell(7).fill = fillFor(duplications <= 3 ? GREEN : RED); }
+
+    for (let i = 1; i <= 7; i++) {
+      const cell = row.getCell(i);
+      cell.border = thinBorder;
+      cell.alignment = { vertical: "middle", horizontal: i === 1 ? "left" : "center" };
+      if (i === 1) cell.font = { size: 11 };
+    }
+    row.height = 20;
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const date = new Date().toISOString().slice(0, 10);
+  a.download = `sonar-report-${org}-${date}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function GateBadge({ status }) {
@@ -617,6 +747,14 @@ export default function SonarDashboard() {
             {f.label}
           </button>
         ))}
+        <button
+          onClick={() => exportToExcel(filtered, measures, org)}
+          disabled={filtered.length === 0}
+          style={{ fontSize: 12, marginLeft: "auto" }}
+          title="Exportar los proyectos filtrados a un fichero Excel"
+        >
+          ⬇ Exportar a Excel ({filtered.length})
+        </button>
       </div>
 
       {filtered.length === 0 ? (
