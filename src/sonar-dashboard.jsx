@@ -278,6 +278,56 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
   URL.revokeObjectURL(url);
 }
 
+function LoadingOverlay({ progress }) {
+  const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 9999,
+    }}>
+      <div style={{
+        background: "var(--color-background-primary, #fff)",
+        padding: "22px 28px",
+        borderRadius: "var(--border-radius-md, 8px)",
+        minWidth: 380,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+        border: "0.5px solid var(--color-border-default, #e0e0e0)",
+      }}>
+        <h3 style={{ margin: 0, marginBottom: 14, fontSize: 14, fontWeight: 600 }}>
+          Cargando datos de SonarCloud
+        </h3>
+        <div style={{
+          background: "var(--color-background-secondary, #f0f0f0)",
+          borderRadius: 4, height: 10, overflow: "hidden", marginBottom: 10,
+        }}>
+          <div style={{
+            background: "var(--color-text-info, #2196F3)",
+            height: "100%", width: `${pct}%`,
+            transition: "width 0.2s ease-out",
+          }} />
+        </div>
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          fontSize: 12, color: "var(--color-text-secondary)",
+        }}>
+          <span>
+            {progress.total > 0
+              ? `Proyectos procesados: ${progress.done} / ${progress.total}`
+              : "Inicializando..."}
+          </span>
+          <span style={{ fontWeight: 600 }}>{pct}%</span>
+        </div>
+        {progress.phase && (
+          <div style={{ marginTop: 8, fontSize: 11, color: "var(--color-text-secondary)" }}>
+            Fase: {progress.phase}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function GateBadge({ status }) {
   const cfg = {
     OK:    { bg: "var(--color-background-success)", color: "var(--color-text-success)", label: "Passed" },
@@ -583,17 +633,19 @@ export default function SonarDashboard() {
   const [pullRequests, setPullRequests] = useState({});
   const [analysisQG, setAnalysisQG] = useState({});
   const [loading, setLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState({ done: 0, total: 0, phase: "" });
   const [error, setError] = useState(null);
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState("all");
 
   const load = useCallback(async (t, o) => {
     setLoading(true);
+    setLoadingProgress({ done: 0, total: 0, phase: "Conectando..." });
     setError(null);
     try {
       const headers = { Authorization: `Basic ${btoa(t + ":")}` };
 
-      const r1 = await fetch(`${API}/components/search_projects?organization=${encodeURIComponent(o)}&ps=50`, { headers });
+      const r1 = await fetch(`${API}/components/search_projects?organization=${encodeURIComponent(o)}&ps=500`, { headers });
       if (!r1.ok) {
         const body = await r1.json().catch(() => ({}));
         const msg = body?.errors?.[0]?.msg || r1.statusText;
@@ -618,6 +670,7 @@ export default function SonarDashboard() {
         const branchMap = {};
         const ceMap = {};
         const prMap = {};
+        setLoadingProgress({ done: 0, total: comps.length, phase: "Datos básicos (ramas, PRs, actividad)" });
         await Promise.all(comps.map(async (comp) => {
           try {
             const [brRes, ceRes, prRes] = await Promise.all([
@@ -639,6 +692,8 @@ export default function SonarDashboard() {
             }
           } catch {
             // no bloquear si falla para un proyecto concreto
+          } finally {
+            setLoadingProgress(prev => ({ ...prev, done: prev.done + 1 }));
           }
         }));
         setBranches(branchMap);
@@ -650,6 +705,7 @@ export default function SonarDashboard() {
         //   measures/search_history (valor real de QG por análisis, sin depender de eventos de cambio).
         // PRs: usar pr.status.qualityGateStatus directamente desde prMap.
         const qgMap = {};
+        setLoadingProgress({ done: 0, total: comps.length, phase: "Historial de Quality Gate" });
         await Promise.all(comps.map(async (comp) => {
           const aMap = {};
           const longBranches = (branchMap[comp.key] || []).filter(br => br.isMain || br.type === "LONG");
@@ -688,6 +744,7 @@ export default function SonarDashboard() {
           }
 
           qgMap[comp.key] = aMap;
+          setLoadingProgress(prev => ({ ...prev, done: prev.done + 1 }));
         }));
         setAnalysisQG(qgMap);
       }
@@ -697,6 +754,7 @@ export default function SonarDashboard() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setLoadingProgress({ done: 0, total: 0, phase: "" });
     }
   }, []);
 
@@ -729,6 +787,7 @@ export default function SonarDashboard() {
   if (!connected) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "80vh", padding: "2rem" }}>
+        {loading && <LoadingOverlay progress={loadingProgress} />}
         <div style={{ width: "100%", maxWidth: 400 }}>
           <h2 style={{ fontSize: 18, fontWeight: 500, marginBottom: 6 }}>SonarCloud dashboard</h2>
           <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 28 }}>
@@ -794,6 +853,7 @@ export default function SonarDashboard() {
 
   return (
     <div style={{ padding: "1.5rem" }}>
+      {loading && <LoadingOverlay progress={loadingProgress} />}
       <h2 style={{ visibility: "hidden", position: "absolute" }}>SonarCloud dashboard</h2>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem", flexWrap: "wrap", gap: 12 }}>
