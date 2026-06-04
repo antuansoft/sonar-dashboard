@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import ExcelJS from "exceljs";
 
 const API = "/api";
 
@@ -57,6 +58,224 @@ function fmtDuration(ms) {
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s}s`;
   return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+async function exportToExcel(projects, measures, branches, pullRequests, ceActivity, analysisQG, org) {
+  const GREEN = "FFC8E6C9";
+  const RED = "FFFFCDD2";
+  const HEADER_BG = "FFE0E0E0";
+  const TITLE_BG = "FFD9D9D9";
+  const REPO_HEADER_BG = "FFFAD4D4";
+  const PERIOD_HEADER_BG = "FFD0E4F5";
+  const NO_DATA_BG = "FFEEEEEE";
+
+  const jenkinsColor = (ratio) => {
+    if (ratio === null || ratio === undefined || isNaN(ratio)) return NO_DATA_BG;
+    if (ratio >= 1.0) return "FF00C853";
+    if (ratio >= 0.8) return "FFA5D6A7";
+    if (ratio >= 0.6) return "FFCDDC39";
+    if (ratio >= 0.4) return "FFFFC107";
+    if (ratio >= 0.2) return "FFFF9800";
+    return "FFF44336";
+  };
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Sonar Dashboard";
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet("Análisis");
+
+  sheet.columns = [
+    { width: 55 },
+    { width: 16 }, { width: 16 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 14 },
+    { width: 10 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 14 },
+    { width: 10 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 14 },
+  ];
+
+  sheet.mergeCells("B1:G1");
+  const titleCell = sheet.getCell("B1");
+  titleCell.value = "RESULTADO DEL ANALISIS";
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  titleCell.font = { bold: true, size: 12 };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TITLE_BG } };
+
+  sheet.mergeCells("H1:L1");
+  const weekTitle = sheet.getCell("H1");
+  weekTitle.value = "ÚLTIMA SEMANA";
+  weekTitle.alignment = { horizontal: "center", vertical: "middle" };
+  weekTitle.font = { bold: true, size: 12 };
+  weekTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
+
+  sheet.mergeCells("M1:Q1");
+  const twoWeekTitle = sheet.getCell("M1");
+  twoWeekTitle.value = "SEMANA ANTERIOR";
+  twoWeekTitle.alignment = { horizontal: "center", vertical: "middle" };
+  twoWeekTitle.font = { bold: true, size: 12 };
+  twoWeekTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
+
+  sheet.getRow(1).height = 22;
+
+  const ramasLegend = "Ramas analizadas\nen el periodo\n(sin código de color)";
+  const prsTotalLegend = "PRs analizadas\nen el periodo\n(sin código de color)";
+  const prsPFLegend = "Passed / Failed (QG)\nGradiente Jenkins:\n✓ Verde → 100%\n⚠ Amarillo → 40-79%\n✗ Rojo → < 40%";
+  const analLegend = "Análisis con QG\nevaluada en el periodo\n(sin código de color)";
+  const analPFLegend = "Passed / Failed (QG)\nGradiente Jenkins:\n✓ Verde → 100%\n⚠ Amarillo → 40-79%\n✗ Rojo → < 40%";
+
+  const allLegends = [
+    "VALOR OPTIMO = A (0)\n✓ Verde → valor = 0 (no issues)\n✗ Rojo/ámbar → valor > 0",
+    "VALOR OPTIMO = A (0)\n✓ Verde → valor = 0 (no issues)\n✗ Rojo/ámbar → valor > 0",
+    "VALOR OPTIMO = A (0)\n✓ Verde → valor = 0 (no issues)\n✗ Rojo/ámbar → valor > 0",
+    "VALOR OPTIMO = 100%\n✓ Verde → 100%\n✗ Rojo → < 100%",
+    "VALOR OPTIMO = 100%\n✓ Verde → 100%\n✗ Rojo → < 100%",
+    "VALOR OPTIMO <= 3%\n✓ Verde → <= 3%\n✗ Rojo → > 3%",
+    ramasLegend, prsTotalLegend, prsPFLegend, analLegend, analPFLegend,
+    ramasLegend, prsTotalLegend, prsPFLegend, analLegend, analPFLegend,
+  ];
+
+  for (let i = 0; i < allLegends.length; i++) {
+    const cell = sheet.getCell(2, i + 2);
+    cell.value = allLegends[i];
+    cell.alignment = { horizontal: "left", vertical: "top", wrapText: true };
+    cell.font = { size: 8 };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_BG } };
+  }
+  sheet.getRow(2).height = 80;
+
+  const headers = [
+    "REPOSITORIO",
+    "SECURITY", "RELIABILITY", "MAINTAINABILITY", "HOTSPOT", "COVERAGE", "DUPLICATIONS",
+    "RAMAS", "PRs TOTAL", "PRs P/F", "ANÁLISIS", "ANÁL P/F",
+    "RAMAS", "PRs TOTAL", "PRs P/F", "ANÁLISIS", "ANÁL P/F",
+  ];
+  const headerRow = sheet.getRow(4);
+  headers.forEach((h, idx) => {
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = h;
+    cell.font = { bold: true, size: 11 };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: REPO_HEADER_BG } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.border = {
+      top: { style: "thin" }, bottom: { style: "thin" },
+      left: { style: "thin" }, right: { style: "thin" },
+    };
+  });
+  headerRow.height = 24;
+
+  const fillFor = (color) => ({ type: "pattern", pattern: "solid", fgColor: { argb: color } });
+  const thinBorder = {
+    top: { style: "thin" }, bottom: { style: "thin" },
+    left: { style: "thin" }, right: { style: "thin" },
+  };
+
+  const now = Date.now();
+  const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
+  const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
+
+  const computePeriod = (projKey, startMs, endMs) => {
+    const inWindow = (dateStr) => {
+      if (!dateStr) return false;
+      const t = new Date(dateStr).getTime();
+      return t >= startMs && t < endMs;
+    };
+
+    const projBranches = branches[projKey] || [];
+    const projPRs = pullRequests[projKey] || [];
+    const projTasks = ceActivity[projKey] || [];
+    const projQG = analysisQG[projKey] || {};
+
+    const ramas = projBranches.filter(b => inWindow(b.analysisDate)).length;
+
+    const prsInWindow = projPRs.filter(pr => inWindow(pr.analysisDate));
+    const prsTotal = prsInWindow.length;
+    const prsPassed = prsInWindow.filter(pr => pr.status?.qualityGateStatus === "OK").length;
+    const prsFailed = prsInWindow.filter(pr => pr.status?.qualityGateStatus === "ERROR").length;
+
+    const tasksInWindow = projTasks.filter(t => inWindow(t.submittedAt));
+    const tasksWithQG = tasksInWindow.filter(t => t.analysisId && projQG[t.analysisId]);
+    const analTotal = tasksWithQG.length;
+    const analPassed = tasksWithQG.filter(t => projQG[t.analysisId] === "OK").length;
+    const analFailed = tasksWithQG.filter(t => projQG[t.analysisId] === "ERROR").length;
+
+    return { ramas, prsTotal, prsPassed, prsFailed, analTotal, analPassed, analFailed };
+  };
+
+  projects.forEach((proj, idx) => {
+    const m = measures[proj.key] || {};
+    const row = sheet.getRow(5 + idx);
+
+    const has = (v) => v !== undefined && v !== null && v !== "";
+    const vulns = has(m.vulnerabilities) ? parseInt(m.vulnerabilities) : null;
+    const bugs = has(m.bugs) ? parseInt(m.bugs) : null;
+    const smells = has(m.code_smells) ? parseInt(m.code_smells) : null;
+    const hotspots = has(m.security_hotspots) ? parseInt(m.security_hotspots) : null;
+    const reviewed = has(m.security_hotspots_reviewed) ? parseFloat(m.security_hotspots_reviewed) : null;
+    const coverage = has(m.coverage) ? parseFloat(m.coverage) : null;
+    const duplications = has(m.duplicated_lines_density) ? parseFloat(m.duplicated_lines_density) : null;
+
+    row.getCell(1).value = proj.key;
+
+    if (vulns === null) row.getCell(2).value = "—";
+    else { row.getCell(2).value = vulns; row.getCell(2).fill = fillFor(vulns === 0 ? GREEN : RED); }
+
+    if (bugs === null) row.getCell(3).value = "—";
+    else { row.getCell(3).value = bugs; row.getCell(3).fill = fillFor(bugs === 0 ? GREEN : RED); }
+
+    if (smells === null) row.getCell(4).value = "—";
+    else { row.getCell(4).value = smells; row.getCell(4).fill = fillFor(smells === 0 ? GREEN : RED); }
+
+    if (hotspots === null && reviewed === null) {
+      row.getCell(5).value = "—";
+    } else {
+      const pct = reviewed === null ? "—" : reviewed.toFixed(1) + "%";
+      row.getCell(5).value = `${hotspots ?? 0} (${pct})`;
+      const ok = (hotspots ?? 0) === 0 || reviewed === 100;
+      row.getCell(5).fill = fillFor(ok ? GREEN : RED);
+    }
+
+    if (coverage === null) row.getCell(6).value = "—";
+    else { row.getCell(6).value = coverage.toFixed(1) + "%"; row.getCell(6).fill = fillFor(coverage === 100 ? GREEN : RED); }
+
+    if (duplications === null) row.getCell(7).value = "—";
+    else { row.getCell(7).value = duplications.toFixed(1) + "%"; row.getCell(7).fill = fillFor(duplications <= 3 ? GREEN : RED); }
+
+    const writePeriod = (startCol, data) => {
+      row.getCell(startCol).value = data.ramas;
+      row.getCell(startCol + 1).value = data.prsTotal;
+
+      const prSum = data.prsPassed + data.prsFailed;
+      row.getCell(startCol + 2).value = `${data.prsPassed} / ${data.prsFailed}`;
+      const prRatio = prSum > 0 ? data.prsPassed / prSum : null;
+      row.getCell(startCol + 2).fill = fillFor(jenkinsColor(prRatio));
+
+      row.getCell(startCol + 3).value = data.analTotal;
+
+      row.getCell(startCol + 4).value = `${data.analPassed} / ${data.analFailed}`;
+      const analRatio = data.analTotal > 0 ? data.analPassed / data.analTotal : null;
+      row.getCell(startCol + 4).fill = fillFor(jenkinsColor(analRatio));
+    };
+
+    writePeriod(8, computePeriod(proj.key, now - ONE_WEEK, now));
+    writePeriod(13, computePeriod(proj.key, now - TWO_WEEKS, now - ONE_WEEK));
+
+    for (let i = 1; i <= 17; i++) {
+      const cell = row.getCell(i);
+      cell.border = thinBorder;
+      cell.alignment = { vertical: "middle", horizontal: i === 1 ? "left" : "center" };
+      if (i === 1) cell.font = { size: 11 };
+    }
+    row.height = 20;
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const date = new Date().toISOString().slice(0, 10);
+  a.download = `sonar-report-${org}-${date}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function GateBadge({ status }) {
@@ -617,6 +836,14 @@ export default function SonarDashboard() {
             {f.label}
           </button>
         ))}
+        <button
+          onClick={() => exportToExcel(filtered, measures, branches, pullRequests, ceActivity, analysisQG, org)}
+          disabled={filtered.length === 0}
+          style={{ fontSize: 12, marginLeft: "auto" }}
+          title="Exportar los proyectos filtrados a un fichero Excel"
+        >
+          ⬇ Exportar a Excel ({filtered.length})
+        </button>
       </div>
 
       {filtered.length === 0 ? (
