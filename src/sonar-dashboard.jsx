@@ -60,7 +60,7 @@ function fmtDuration(ms) {
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-async function exportToExcel(projects, measures, branches, pullRequests, ceActivity, analysisQG, org) {
+async function exportToExcel(projects, measures, branches, pullRequests, org) {
   const GREEN = "FFC8E6C9";
   const RED = "FFFFCDD2";
   const HEADER_BG = "FFE0E0E0";
@@ -87,8 +87,8 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
   sheet.columns = [
     { width: 55 },
     { width: 16 }, { width: 16 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 14 },
-    { width: 10 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 14 },
-    { width: 10 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 14 },
+    { width: 10 }, { width: 12 }, { width: 14 },
+    { width: 10 }, { width: 12 }, { width: 14 },
   ];
 
   sheet.mergeCells("B1:G1");
@@ -98,15 +98,15 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
   titleCell.font = { bold: true, size: 12 };
   titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TITLE_BG } };
 
-  sheet.mergeCells("H1:L1");
+  sheet.mergeCells("H1:J1");
   const weekTitle = sheet.getCell("H1");
   weekTitle.value = "ÚLTIMA SEMANA";
   weekTitle.alignment = { horizontal: "center", vertical: "middle" };
   weekTitle.font = { bold: true, size: 12 };
   weekTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
 
-  sheet.mergeCells("M1:Q1");
-  const twoWeekTitle = sheet.getCell("M1");
+  sheet.mergeCells("K1:M1");
+  const twoWeekTitle = sheet.getCell("K1");
   twoWeekTitle.value = "SEMANA ANTERIOR";
   twoWeekTitle.alignment = { horizontal: "center", vertical: "middle" };
   twoWeekTitle.font = { bold: true, size: 12 };
@@ -117,8 +117,6 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
   const ramasLegend = "Ramas analizadas\nen el periodo\n(sin código de color)";
   const prsTotalLegend = "PRs analizadas\nen el periodo\n(sin código de color)";
   const prsPFLegend = "Passed / Failed (QG)\nGradiente Jenkins:\n✓ Verde → 100%\n⚠ Amarillo → 40-79%\n✗ Rojo → < 40%";
-  const analLegend = "Análisis con QG\nevaluada en el periodo\n(sin código de color)";
-  const analPFLegend = "Passed / Failed (QG)\nGradiente Jenkins:\n✓ Verde → 100%\n⚠ Amarillo → 40-79%\n✗ Rojo → < 40%";
 
   const allLegends = [
     "VALOR OPTIMO = A (0)\n✓ Verde → valor = 0 (no issues)\n✗ Rojo/ámbar → valor > 0",
@@ -127,8 +125,8 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
     "VALOR OPTIMO = 100%\n✓ Verde → 100%\n✗ Rojo → < 100%",
     "VALOR OPTIMO = 100%\n✓ Verde → 100%\n✗ Rojo → < 100%",
     "VALOR OPTIMO <= 3%\n✓ Verde → <= 3%\n✗ Rojo → > 3%",
-    ramasLegend, prsTotalLegend, prsPFLegend, analLegend, analPFLegend,
-    ramasLegend, prsTotalLegend, prsPFLegend, analLegend, analPFLegend,
+    ramasLegend, prsTotalLegend, prsPFLegend,
+    ramasLegend, prsTotalLegend, prsPFLegend,
   ];
 
   for (let i = 0; i < allLegends.length; i++) {
@@ -143,8 +141,8 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
   const headers = [
     "REPOSITORIO",
     "SECURITY", "RELIABILITY", "MAINTAINABILITY", "HOTSPOT", "COVERAGE", "DUPLICATIONS",
-    "RAMAS", "PRs TOTAL", "PRs P/F", "ANÁLISIS", "ANÁL P/F",
-    "RAMAS", "PRs TOTAL", "PRs P/F", "ANÁLISIS", "ANÁL P/F",
+    "RAMAS", "PRs TOTAL", "PRs P/F",
+    "RAMAS", "PRs TOTAL", "PRs P/F",
   ];
   const headerRow = sheet.getRow(4);
   headers.forEach((h, idx) => {
@@ -179,8 +177,6 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
 
     const projBranches = branches[projKey] || [];
     const projPRs = pullRequests[projKey] || [];
-    const projTasks = ceActivity[projKey] || [];
-    const projQG = analysisQG[projKey] || {};
 
     const ramas = projBranches.filter(b => inWindow(b.analysisDate)).length;
 
@@ -189,13 +185,7 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
     const prsPassed = prsInWindow.filter(pr => pr.status?.qualityGateStatus === "OK").length;
     const prsFailed = prsInWindow.filter(pr => pr.status?.qualityGateStatus === "ERROR").length;
 
-    const tasksInWindow = projTasks.filter(t => inWindow(t.submittedAt));
-    const tasksWithQG = tasksInWindow.filter(t => t.analysisId && projQG[t.analysisId]);
-    const analTotal = tasksWithQG.length;
-    const analPassed = tasksWithQG.filter(t => projQG[t.analysisId] === "OK").length;
-    const analFailed = tasksWithQG.filter(t => projQG[t.analysisId] === "ERROR").length;
-
-    return { ramas, prsTotal, prsPassed, prsFailed, analTotal, analPassed, analFailed };
+    return { ramas, prsTotal, prsPassed, prsFailed };
   };
 
   projects.forEach((proj, idx) => {
@@ -245,18 +235,12 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
       row.getCell(startCol + 2).value = `${data.prsPassed} / ${data.prsFailed}`;
       const prRatio = prSum > 0 ? data.prsPassed / prSum : null;
       row.getCell(startCol + 2).fill = fillFor(jenkinsColor(prRatio));
-
-      row.getCell(startCol + 3).value = data.analTotal;
-
-      row.getCell(startCol + 4).value = `${data.analPassed} / ${data.analFailed}`;
-      const analRatio = data.analTotal > 0 ? data.analPassed / data.analTotal : null;
-      row.getCell(startCol + 4).fill = fillFor(jenkinsColor(analRatio));
     };
 
     writePeriod(8, computePeriod(proj.key, now - ONE_WEEK, now));
-    writePeriod(13, computePeriod(proj.key, now - TWO_WEEKS, now - ONE_WEEK));
+    writePeriod(11, computePeriod(proj.key, now - TWO_WEEKS, now - ONE_WEEK));
 
-    for (let i = 1; i <= 17; i++) {
+    for (let i = 1; i <= 13; i++) {
       const cell = row.getCell(i);
       cell.border = thinBorder;
       cell.alignment = { vertical: "middle", horizontal: i === 1 ? "left" : "center" };
@@ -897,7 +881,7 @@ export default function SonarDashboard() {
           </button>
         ))}
         <button
-          onClick={() => exportToExcel(filtered, measures, branches, pullRequests, ceActivity, analysisQG, org)}
+          onClick={() => exportToExcel(filtered, measures, branches, pullRequests, org)}
           disabled={filtered.length === 0}
           style={{ fontSize: 12, marginLeft: "auto" }}
           title="Exportar los proyectos filtrados a un fichero Excel"
