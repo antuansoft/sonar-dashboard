@@ -1,0 +1,37 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Arrancar Sonar Dashboard",
+      "type": "shell",
+      "command": "npm run dev",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "focus": true
+      }
+    },
+    {
+      "label": "Parar Sonar Dashboard",
+      "type": "shell",
+      "command": "$procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*vite*' -and $_.CommandLine -like '*sonar-dashboard*' }; if ($procs) { $procs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; Write-Host ('Sonar Dashboard parado (' + @($procs).Count + ' proceso(s) terminado(s)).') -ForegroundColor Green } else { Write-Host 'No hay proceso Vite de sonar-dashboard corriendo.' -ForegroundColor Yellow }",
+      "options": {
+        "shell": {
+          "executable": "powershell.exe",
+          "args": ["-NoProfile", "-Command"]
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": false,
+        "close": false
+      },
+      "problemMatcher": []
+    }
+  ]
+}
