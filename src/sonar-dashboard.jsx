@@ -99,18 +99,18 @@ async function exportToExcel(projects, measures, branches, pullRequests, org) {
   titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TITLE_BG } };
 
   sheet.mergeCells("H1:J1");
-  const weekTitle = sheet.getCell("H1");
-  weekTitle.value = "ÚLTIMA SEMANA";
-  weekTitle.alignment = { horizontal: "center", vertical: "middle" };
-  weekTitle.font = { bold: true, size: 12 };
-  weekTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
+  const currentPeriodTitle = sheet.getCell("H1");
+  currentPeriodTitle.value = "ÚLTIMO MES";
+  currentPeriodTitle.alignment = { horizontal: "center", vertical: "middle" };
+  currentPeriodTitle.font = { bold: true, size: 12 };
+  currentPeriodTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
 
   sheet.mergeCells("K1:M1");
-  const twoWeekTitle = sheet.getCell("K1");
-  twoWeekTitle.value = "SEMANA ANTERIOR";
-  twoWeekTitle.alignment = { horizontal: "center", vertical: "middle" };
-  twoWeekTitle.font = { bold: true, size: 12 };
-  twoWeekTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
+  const previousPeriodTitle = sheet.getCell("K1");
+  previousPeriodTitle.value = "MES ANTERIOR";
+  previousPeriodTitle.alignment = { horizontal: "center", vertical: "middle" };
+  previousPeriodTitle.font = { bold: true, size: 12 };
+  previousPeriodTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
 
   sheet.getRow(1).height = 22;
 
@@ -165,8 +165,8 @@ async function exportToExcel(projects, measures, branches, pullRequests, org) {
   };
 
   const now = Date.now();
-  const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
-  const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
+  const ONE_MONTH = 30 * 24 * 60 * 60 * 1000;
+  const TWO_MONTHS = 60 * 24 * 60 * 60 * 1000;
 
   const computePeriod = (projKey, startMs, endMs) => {
     const inWindow = (dateStr) => {
@@ -237,8 +237,8 @@ async function exportToExcel(projects, measures, branches, pullRequests, org) {
       row.getCell(startCol + 2).fill = fillFor(jenkinsColor(prRatio));
     };
 
-    writePeriod(8, computePeriod(proj.key, now - ONE_WEEK, now));
-    writePeriod(11, computePeriod(proj.key, now - TWO_WEEKS, now - ONE_WEEK));
+    writePeriod(8, computePeriod(proj.key, now - ONE_MONTH, now));
+    writePeriod(11, computePeriod(proj.key, now - TWO_MONTHS, now - ONE_MONTH));
 
     for (let i = 1; i <= 13; i++) {
       const cell = row.getCell(i);
