@@ -113,60 +113,86 @@ Al cerrar el navegador o pulsar **Desconectar**, hay que volver a introducirlos.
 
 ## 4. Arrancar la aplicación
 
-### Desde VSCode
+### Método principal — VSCode Tasks (recomendado)
+
+El proyecto incluye tareas de VSCode preconfiguradas (`.vscode/tasks.json`) para arrancar y parar el servidor sin tener que teclear comandos.
 
 1. Abre la carpeta del proyecto en VSCode: **File → Open Folder...**
-2. Abre el terminal integrado: **Terminal → New Terminal** (o pulsa <kbd>Ctrl</kbd> + <kbd>ñ</kbd>).
-3. Ejecuta:
-   ```bash
-   npm run dev
-   ```
-4. Vite mostrará algo como:
+2. En el menú: **Terminal → Run Task...** (o pulsa <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> y escribe "Run Task").
+3. Selecciona **Arrancar Sonar Dashboard**.
+4. Se abre un terminal nuevo en VSCode con `npm run dev` ejecutándose.
+5. Vite mostrará algo como:
    ```
    ➜  Local:   http://localhost:5173/
    ➜  Network: ...
    ```
-5. Pulsa <kbd>Ctrl</kbd> + click en la URL para abrir el dashboard en tu navegador.
+6. Pulsa <kbd>Ctrl</kbd> + click en la URL para abrir el dashboard.
 
-### Desde terminal externa
+> 💡 Atajo: <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> lanza directamente la tarea por defecto (**Arrancar Sonar Dashboard**).
 
+### Método alternativo — Terminal manual
+
+Si no usas VSCode o prefieres el control manual:
+
+**Desde el terminal integrado de VSCode**:
+1. **Terminal → New Terminal** (o <kbd>Ctrl</kbd> + <kbd>ñ</kbd>).
+2. Ejecuta:
+   ```bash
+   npm run dev
+   ```
+
+**Desde terminal externa**:
 ```bash
 cd sonar-dashboard
 npm run dev
 ```
 
-Y abre [http://localhost:5173](http://localhost:5173) en el navegador.
+Abre [http://localhost:5173](http://localhost:5173) en el navegador.
 
 ---
 
 ## 5. Cerrar la aplicación correctamente
 
-El servidor de desarrollo de Vite queda corriendo en el terminal hasta que lo pares.
+### Método principal — VSCode Task (recomendado)
 
-### Cerrar el servidor
+1. **Terminal → Run Task...**
+2. Selecciona **Parar Sonar Dashboard**.
+
+La tarea busca el proceso `node` que esté ejecutando Vite para este proyecto (`vite` + `sonar-dashboard` en su línea de comandos) y lo termina con `Stop-Process -Force`. Funciona en cualquier puerto y solo afecta a este proyecto — si tienes otros servidores Vite corriendo, no los toca.
+
+Verás un mensaje:
+- 🟢 **Verde** si paró algo: *"Sonar Dashboard parado (N proceso(s) terminado(s))."*
+- 🟡 **Amarillo** si no había nada: *"No hay proceso Vite de sonar-dashboard corriendo."*
+
+La tarea es idempotente: puedes lanzarla aunque ya no haya servidor corriendo, no falla.
+
+> ⚠️ Requiere PowerShell (Windows). En Linux/macOS usa el método alternativo.
+
+### Método alternativo — Ctrl+C
 
 En el terminal donde corre `npm run dev`:
 
 - **Windows / Linux / macOS**: pulsa <kbd>Ctrl</kbd> + <kbd>C</kbd>.
 - Si Windows pregunta `¿Terminar el trabajo por lotes (S/N)?`, responde <kbd>S</kbd>.
 
-Verás que el prompt vuelve. Ya puedes cerrar el terminal con seguridad.
-
 ### Si el puerto se queda ocupado
 
-Si después de cerrar mal alguna vez Vite te dice que el puerto 5173 está en uso:
+Si Vite dice que el puerto está en uso al arrancar:
+
+1. Lanza la tarea **Parar Sonar Dashboard** (limpia el proceso huérfano).
+2. Vuelve a lanzar **Arrancar Sonar Dashboard**.
+
+Si por algún motivo la tarea no encuentra el proceso (puerto ocupado por otra cosa):
 
 **Windows (PowerShell):**
 ```powershell
-Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 ```
 
 **Linux / macOS:**
 ```bash
 pkill -f vite
 ```
-
-Luego vuelve a `npm run dev`.
 
 ### Desconectar del dashboard (sin parar el servidor)
 
@@ -175,6 +201,8 @@ Dentro de la propia aplicación, pulsa el botón **Desconectar** en la esquina s
 - Limpia los datos cargados de SonarCloud.
 - Limpia el `localStorage` (si tenías "Recordar" activo).
 - Restaura el formulario de login (o re-aplica `.env.local` si lo tienes).
+
+El servidor de Vite sigue corriendo; solo se cierra la "sesión" del dashboard.
 
 ---
 
