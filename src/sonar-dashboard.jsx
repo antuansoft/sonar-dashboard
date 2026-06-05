@@ -60,7 +60,9 @@ function fmtDuration(ms) {
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-async function exportToExcel(projects, measures, branches, pullRequests, ceActivity, analysisQG, org) {
+async function exportToExcel(allProjects, measures, branches, pullRequests, org) {
+  const projects = allProjects.filter(p => !(p.tags || []).includes("report-exclude"));
+  if (projects.length === 0) return;
   const GREEN = "FFC8E6C9";
   const RED = "FFFFCDD2";
   const HEADER_BG = "FFE0E0E0";
@@ -87,8 +89,8 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
   sheet.columns = [
     { width: 55 },
     { width: 16 }, { width: 16 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 14 },
-    { width: 10 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 14 },
-    { width: 10 }, { width: 12 }, { width: 14 }, { width: 12 }, { width: 14 },
+    { width: 10 }, { width: 12 }, { width: 14 },
+    { width: 10 }, { width: 12 }, { width: 14 },
   ];
 
   sheet.mergeCells("B1:G1");
@@ -98,27 +100,25 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
   titleCell.font = { bold: true, size: 12 };
   titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TITLE_BG } };
 
-  sheet.mergeCells("H1:L1");
-  const weekTitle = sheet.getCell("H1");
-  weekTitle.value = "ÚLTIMA SEMANA";
-  weekTitle.alignment = { horizontal: "center", vertical: "middle" };
-  weekTitle.font = { bold: true, size: 12 };
-  weekTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
+  sheet.mergeCells("H1:J1");
+  const currentPeriodTitle = sheet.getCell("H1");
+  currentPeriodTitle.value = "ÚLTIMO MES";
+  currentPeriodTitle.alignment = { horizontal: "center", vertical: "middle" };
+  currentPeriodTitle.font = { bold: true, size: 12 };
+  currentPeriodTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
 
-  sheet.mergeCells("M1:Q1");
-  const twoWeekTitle = sheet.getCell("M1");
-  twoWeekTitle.value = "SEMANA ANTERIOR";
-  twoWeekTitle.alignment = { horizontal: "center", vertical: "middle" };
-  twoWeekTitle.font = { bold: true, size: 12 };
-  twoWeekTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
+  sheet.mergeCells("K1:M1");
+  const previousPeriodTitle = sheet.getCell("K1");
+  previousPeriodTitle.value = "MES ANTERIOR";
+  previousPeriodTitle.alignment = { horizontal: "center", vertical: "middle" };
+  previousPeriodTitle.font = { bold: true, size: 12 };
+  previousPeriodTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: PERIOD_HEADER_BG } };
 
   sheet.getRow(1).height = 22;
 
   const ramasLegend = "Ramas analizadas\nen el periodo\n(sin código de color)";
   const prsTotalLegend = "PRs analizadas\nen el periodo\n(sin código de color)";
   const prsPFLegend = "Passed / Failed (QG)\nGradiente Jenkins:\n✓ Verde → 100%\n⚠ Amarillo → 40-79%\n✗ Rojo → < 40%";
-  const analLegend = "Análisis con QG\nevaluada en el periodo\n(sin código de color)";
-  const analPFLegend = "Passed / Failed (QG)\nGradiente Jenkins:\n✓ Verde → 100%\n⚠ Amarillo → 40-79%\n✗ Rojo → < 40%";
 
   const allLegends = [
     "VALOR OPTIMO = A (0)\n✓ Verde → valor = 0 (no issues)\n✗ Rojo/ámbar → valor > 0",
@@ -127,8 +127,8 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
     "VALOR OPTIMO = 100%\n✓ Verde → 100%\n✗ Rojo → < 100%",
     "VALOR OPTIMO = 100%\n✓ Verde → 100%\n✗ Rojo → < 100%",
     "VALOR OPTIMO <= 3%\n✓ Verde → <= 3%\n✗ Rojo → > 3%",
-    ramasLegend, prsTotalLegend, prsPFLegend, analLegend, analPFLegend,
-    ramasLegend, prsTotalLegend, prsPFLegend, analLegend, analPFLegend,
+    ramasLegend, prsTotalLegend, prsPFLegend,
+    ramasLegend, prsTotalLegend, prsPFLegend,
   ];
 
   for (let i = 0; i < allLegends.length; i++) {
@@ -143,8 +143,8 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
   const headers = [
     "REPOSITORIO",
     "SECURITY", "RELIABILITY", "MAINTAINABILITY", "HOTSPOT", "COVERAGE", "DUPLICATIONS",
-    "RAMAS", "PRs TOTAL", "PRs P/F", "ANÁLISIS", "ANÁL P/F",
-    "RAMAS", "PRs TOTAL", "PRs P/F", "ANÁLISIS", "ANÁL P/F",
+    "RAMAS", "PRs TOTAL", "PRs P/F",
+    "RAMAS", "PRs TOTAL", "PRs P/F",
   ];
   const headerRow = sheet.getRow(4);
   headers.forEach((h, idx) => {
@@ -167,8 +167,8 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
   };
 
   const now = Date.now();
-  const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
-  const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
+  const ONE_MONTH = 30 * 24 * 60 * 60 * 1000;
+  const TWO_MONTHS = 60 * 24 * 60 * 60 * 1000;
 
   const computePeriod = (projKey, startMs, endMs) => {
     const inWindow = (dateStr) => {
@@ -179,8 +179,6 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
 
     const projBranches = branches[projKey] || [];
     const projPRs = pullRequests[projKey] || [];
-    const projTasks = ceActivity[projKey] || [];
-    const projQG = analysisQG[projKey] || {};
 
     const ramas = projBranches.filter(b => inWindow(b.analysisDate)).length;
 
@@ -189,13 +187,7 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
     const prsPassed = prsInWindow.filter(pr => pr.status?.qualityGateStatus === "OK").length;
     const prsFailed = prsInWindow.filter(pr => pr.status?.qualityGateStatus === "ERROR").length;
 
-    const tasksInWindow = projTasks.filter(t => inWindow(t.submittedAt));
-    const tasksWithQG = tasksInWindow.filter(t => t.analysisId && projQG[t.analysisId]);
-    const analTotal = tasksWithQG.length;
-    const analPassed = tasksWithQG.filter(t => projQG[t.analysisId] === "OK").length;
-    const analFailed = tasksWithQG.filter(t => projQG[t.analysisId] === "ERROR").length;
-
-    return { ramas, prsTotal, prsPassed, prsFailed, analTotal, analPassed, analFailed };
+    return { ramas, prsTotal, prsPassed, prsFailed };
   };
 
   projects.forEach((proj, idx) => {
@@ -245,18 +237,12 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
       row.getCell(startCol + 2).value = `${data.prsPassed} / ${data.prsFailed}`;
       const prRatio = prSum > 0 ? data.prsPassed / prSum : null;
       row.getCell(startCol + 2).fill = fillFor(jenkinsColor(prRatio));
-
-      row.getCell(startCol + 3).value = data.analTotal;
-
-      row.getCell(startCol + 4).value = `${data.analPassed} / ${data.analFailed}`;
-      const analRatio = data.analTotal > 0 ? data.analPassed / data.analTotal : null;
-      row.getCell(startCol + 4).fill = fillFor(jenkinsColor(analRatio));
     };
 
-    writePeriod(8, computePeriod(proj.key, now - ONE_WEEK, now));
-    writePeriod(13, computePeriod(proj.key, now - TWO_WEEKS, now - ONE_WEEK));
+    writePeriod(8, computePeriod(proj.key, now - ONE_MONTH, now));
+    writePeriod(11, computePeriod(proj.key, now - TWO_MONTHS, now - ONE_MONTH));
 
-    for (let i = 1; i <= 17; i++) {
+    for (let i = 1; i <= 13; i++) {
       const cell = row.getCell(i);
       cell.border = thinBorder;
       cell.alignment = { vertical: "middle", horizontal: i === 1 ? "left" : "center" };
@@ -276,6 +262,56 @@ async function exportToExcel(projects, measures, branches, pullRequests, ceActiv
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function LoadingOverlay({ progress }) {
+  const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 9999,
+    }}>
+      <div style={{
+        background: "var(--color-background-primary, #fff)",
+        padding: "22px 28px",
+        borderRadius: "var(--border-radius-md, 8px)",
+        minWidth: 380,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+        border: "0.5px solid var(--color-border-default, #e0e0e0)",
+      }}>
+        <h3 style={{ margin: 0, marginBottom: 14, fontSize: 14, fontWeight: 600 }}>
+          Cargando datos de SonarCloud
+        </h3>
+        <div style={{
+          background: "var(--color-background-secondary, #f0f0f0)",
+          borderRadius: 4, height: 10, overflow: "hidden", marginBottom: 10,
+        }}>
+          <div style={{
+            background: "var(--color-text-info, #2196F3)",
+            height: "100%", width: `${pct}%`,
+            transition: "width 0.2s ease-out",
+          }} />
+        </div>
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          fontSize: 12, color: "var(--color-text-secondary)",
+        }}>
+          <span>
+            {progress.total > 0
+              ? `Proyectos procesados: ${progress.done} / ${progress.total}`
+              : "Inicializando..."}
+          </span>
+          <span style={{ fontWeight: 600 }}>{pct}%</span>
+        </div>
+        {progress.phase && (
+          <div style={{ marginTop: 8, fontSize: 11, color: "var(--color-text-secondary)" }}>
+            Fase: {progress.phase}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function GateBadge({ status }) {
@@ -511,6 +547,52 @@ function AnalysisPanel({ branches = [], tasks = [], prs = [], analysisQG = {} })
   );
 }
 
+function TagChips({ tags = [] }) {
+  if (!tags || tags.length === 0) {
+    return (
+      <span style={{
+        fontSize: 10,
+        color: "var(--color-text-secondary)",
+        fontStyle: "italic",
+        opacity: 0.7,
+      }}>
+        Sin tags
+      </span>
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+      {tags.map(tag => {
+        const isExcluded = tag === "report-exclude";
+        return (
+          <span
+            key={tag}
+            title={isExcluded ? "Este proyecto no se incluirá en el Excel" : undefined}
+            style={{
+              fontSize: 10,
+              padding: "1px 6px",
+              borderRadius: "var(--border-radius-md)",
+              background: isExcluded
+                ? "var(--color-background-danger)"
+                : "var(--color-background-secondary)",
+              color: isExcluded
+                ? "var(--color-text-danger)"
+                : "var(--color-text-secondary)",
+              border: isExcluded
+                ? "0.5px solid var(--color-border-danger)"
+                : "0.5px solid var(--color-border-tertiary)",
+              fontWeight: isExcluded ? 600 : 400,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {tag}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function ProjectCard({ project, m, branches = [], tasks = [], prs = [], analysisQG = {} }) {
   const [showAnalysis, setShowAnalysis] = useState(false);
 
@@ -522,12 +604,15 @@ function ProjectCard({ project, m, branches = [], tasks = [], prs = [], analysis
       padding: "16px",
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 14 }}>
-        <div style={{ overflow: "hidden" }}>
+        <div style={{ overflow: "hidden", flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {project.name}
           </div>
           <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {project.key}
+          </div>
+          <div style={{ marginTop: 6 }}>
+            <TagChips tags={project.tags} />
           </div>
         </div>
         <GateBadge status={m?.alert_status} />
@@ -583,17 +668,19 @@ export default function SonarDashboard() {
   const [pullRequests, setPullRequests] = useState({});
   const [analysisQG, setAnalysisQG] = useState({});
   const [loading, setLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState({ done: 0, total: 0, phase: "" });
   const [error, setError] = useState(null);
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState("all");
 
   const load = useCallback(async (t, o) => {
     setLoading(true);
+    setLoadingProgress({ done: 0, total: 0, phase: "Conectando..." });
     setError(null);
     try {
       const headers = { Authorization: `Basic ${btoa(t + ":")}` };
 
-      const r1 = await fetch(`${API}/components/search_projects?organization=${encodeURIComponent(o)}&ps=50`, { headers });
+      const r1 = await fetch(`${API}/components/search_projects?organization=${encodeURIComponent(o)}&ps=500`, { headers });
       if (!r1.ok) {
         const body = await r1.json().catch(() => ({}));
         const msg = body?.errors?.[0]?.msg || r1.statusText;
@@ -618,6 +705,7 @@ export default function SonarDashboard() {
         const branchMap = {};
         const ceMap = {};
         const prMap = {};
+        setLoadingProgress({ done: 0, total: comps.length, phase: "Datos básicos (ramas, PRs, actividad)" });
         await Promise.all(comps.map(async (comp) => {
           try {
             const [brRes, ceRes, prRes] = await Promise.all([
@@ -639,6 +727,8 @@ export default function SonarDashboard() {
             }
           } catch {
             // no bloquear si falla para un proyecto concreto
+          } finally {
+            setLoadingProgress(prev => ({ ...prev, done: prev.done + 1 }));
           }
         }));
         setBranches(branchMap);
@@ -650,6 +740,7 @@ export default function SonarDashboard() {
         //   measures/search_history (valor real de QG por análisis, sin depender de eventos de cambio).
         // PRs: usar pr.status.qualityGateStatus directamente desde prMap.
         const qgMap = {};
+        setLoadingProgress({ done: 0, total: comps.length, phase: "Historial de Quality Gate" });
         await Promise.all(comps.map(async (comp) => {
           const aMap = {};
           const longBranches = (branchMap[comp.key] || []).filter(br => br.isMain || br.type === "LONG");
@@ -688,6 +779,7 @@ export default function SonarDashboard() {
           }
 
           qgMap[comp.key] = aMap;
+          setLoadingProgress(prev => ({ ...prev, done: prev.done + 1 }));
         }));
         setAnalysisQG(qgMap);
       }
@@ -697,6 +789,7 @@ export default function SonarDashboard() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setLoadingProgress({ done: 0, total: 0, phase: "" });
     }
   }, []);
 
@@ -725,10 +818,12 @@ export default function SonarDashboard() {
   const failCount  = projects.filter(p => measures[p.key]?.alert_status === "ERROR").length;
   const totalLines = projects.reduce((acc, p) => acc + parseInt(measures[p.key]?.ncloc || 0), 0);
   const totalBugs  = projects.reduce((acc, p) => acc + parseInt(measures[p.key]?.bugs || 0), 0);
+  const exportableCount = filtered.filter(p => !(p.tags || []).includes("report-exclude")).length;
 
   if (!connected) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "80vh", padding: "2rem" }}>
+        {loading && <LoadingOverlay progress={loadingProgress} />}
         <div style={{ width: "100%", maxWidth: 400 }}>
           <h2 style={{ fontSize: 18, fontWeight: 500, marginBottom: 6 }}>SonarCloud dashboard</h2>
           <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 28 }}>
@@ -794,6 +889,7 @@ export default function SonarDashboard() {
 
   return (
     <div style={{ padding: "1.5rem" }}>
+      {loading && <LoadingOverlay progress={loadingProgress} />}
       <h2 style={{ visibility: "hidden", position: "absolute" }}>SonarCloud dashboard</h2>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem", flexWrap: "wrap", gap: 12 }}>
@@ -837,12 +933,12 @@ export default function SonarDashboard() {
           </button>
         ))}
         <button
-          onClick={() => exportToExcel(filtered, measures, branches, pullRequests, ceActivity, analysisQG, org)}
-          disabled={filtered.length === 0}
+          onClick={() => exportToExcel(filtered, measures, branches, pullRequests, org)}
+          disabled={exportableCount === 0}
           style={{ fontSize: 12, marginLeft: "auto" }}
-          title="Exportar los proyectos filtrados a un fichero Excel"
+          title={`Exportar a Excel los proyectos filtrados (se excluyen los etiquetados con "report-exclude")`}
         >
-          ⬇ Exportar a Excel ({filtered.length})
+          ⬇ Exportar a Excel ({exportableCount})
         </button>
       </div>
 
