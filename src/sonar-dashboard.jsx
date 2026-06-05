@@ -60,7 +60,9 @@ function fmtDuration(ms) {
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-async function exportToExcel(projects, measures, branches, pullRequests, org) {
+async function exportToExcel(allProjects, measures, branches, pullRequests, org) {
+  const projects = allProjects.filter(p => !(p.tags || []).includes("report-exclude"));
+  if (projects.length === 0) return;
   const GREEN = "FFC8E6C9";
   const RED = "FFFFCDD2";
   const HEADER_BG = "FFE0E0E0";
@@ -545,6 +547,52 @@ function AnalysisPanel({ branches = [], tasks = [], prs = [], analysisQG = {} })
   );
 }
 
+function TagChips({ tags = [] }) {
+  if (!tags || tags.length === 0) {
+    return (
+      <span style={{
+        fontSize: 10,
+        color: "var(--color-text-secondary)",
+        fontStyle: "italic",
+        opacity: 0.7,
+      }}>
+        Sin tags
+      </span>
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+      {tags.map(tag => {
+        const isExcluded = tag === "report-exclude";
+        return (
+          <span
+            key={tag}
+            title={isExcluded ? "Este proyecto no se incluirá en el Excel" : undefined}
+            style={{
+              fontSize: 10,
+              padding: "1px 6px",
+              borderRadius: "var(--border-radius-md)",
+              background: isExcluded
+                ? "var(--color-background-danger)"
+                : "var(--color-background-secondary)",
+              color: isExcluded
+                ? "var(--color-text-danger)"
+                : "var(--color-text-secondary)",
+              border: isExcluded
+                ? "0.5px solid var(--color-border-danger)"
+                : "0.5px solid var(--color-border-tertiary)",
+              fontWeight: isExcluded ? 600 : 400,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {tag}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function ProjectCard({ project, m, branches = [], tasks = [], prs = [], analysisQG = {} }) {
   const [showAnalysis, setShowAnalysis] = useState(false);
 
@@ -556,12 +604,15 @@ function ProjectCard({ project, m, branches = [], tasks = [], prs = [], analysis
       padding: "16px",
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 14 }}>
-        <div style={{ overflow: "hidden" }}>
+        <div style={{ overflow: "hidden", flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {project.name}
           </div>
           <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {project.key}
+          </div>
+          <div style={{ marginTop: 6 }}>
+            <TagChips tags={project.tags} />
           </div>
         </div>
         <GateBadge status={m?.alert_status} />
@@ -767,6 +818,7 @@ export default function SonarDashboard() {
   const failCount  = projects.filter(p => measures[p.key]?.alert_status === "ERROR").length;
   const totalLines = projects.reduce((acc, p) => acc + parseInt(measures[p.key]?.ncloc || 0), 0);
   const totalBugs  = projects.reduce((acc, p) => acc + parseInt(measures[p.key]?.bugs || 0), 0);
+  const exportableCount = filtered.filter(p => !(p.tags || []).includes("report-exclude")).length;
 
   if (!connected) {
     return (
@@ -882,11 +934,11 @@ export default function SonarDashboard() {
         ))}
         <button
           onClick={() => exportToExcel(filtered, measures, branches, pullRequests, org)}
-          disabled={filtered.length === 0}
+          disabled={exportableCount === 0}
           style={{ fontSize: 12, marginLeft: "auto" }}
-          title="Exportar los proyectos filtrados a un fichero Excel"
+          title={`Exportar a Excel los proyectos filtrados (se excluyen los etiquetados con "report-exclude")`}
         >
-          ⬇ Exportar a Excel ({filtered.length})
+          ⬇ Exportar a Excel ({exportableCount})
         </button>
       </div>
 
