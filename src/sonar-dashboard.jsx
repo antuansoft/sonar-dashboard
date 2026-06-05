@@ -1,7 +1,19 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import ExcelJS from "exceljs";
 
 const API = "/api";
+
+const STORAGE_KEY_TOKEN = "sonar-dashboard.token";
+const STORAGE_KEY_ORG = "sonar-dashboard.org";
+const STORAGE_KEY_REMEMBER = "sonar-dashboard.remember";
+
+// base64 es ofuscación cosmética, NO cifrado: el token sigue siendo recuperable
+// en DevTools. Sirve para que no aparezca en claro en capturas o pantalla compartida.
+const obfuscateToken = (t) => btoa(t);
+const deobfuscateToken = (s) => { try { return atob(s); } catch { return ""; } };
+
+const ENV_TOKEN = import.meta.env.VITE_SONAR_TOKEN || "";
+const ENV_ORG = import.meta.env.VITE_SONAR_ORG || "";
 
 const METRICS = [
   "bugs", "vulnerabilities", "code_smells",
@@ -659,8 +671,18 @@ function StatCard({ label, value, note }) {
 }
 
 export default function SonarDashboard() {
-  const [token, setToken] = useState("");
-  const [org, setOrg] = useState("");
+  const [token, setToken] = useState(() => {
+    if (ENV_TOKEN) return ENV_TOKEN;
+    const stored = localStorage.getItem(STORAGE_KEY_TOKEN);
+    return stored ? deobfuscateToken(stored) : "";
+  });
+  const [org, setOrg] = useState(() => {
+    if (ENV_ORG) return ENV_ORG;
+    return localStorage.getItem(STORAGE_KEY_ORG) || "";
+  });
+  const [remember, setRemember] = useState(() => {
+    return localStorage.getItem(STORAGE_KEY_REMEMBER) === "1";
+  });
   const [projects, setProjects] = useState([]);
   const [measures, setMeasures] = useState({});
   const [branches, setBranches] = useState({});
@@ -795,6 +817,28 @@ export default function SonarDashboard() {
 
   const handleConnect = () => { if (token && org) load(token, org); };
 
+  // Autoconexión: si al montar ya tenemos credenciales (env o localStorage), conecta solo.
+  useEffect(() => {
+    if (token && org && !connected && !loading) {
+      load(token, org);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persistencia: al conectar exitosamente, guarda/limpia según el checkbox "Recordar".
+  useEffect(() => {
+    if (!connected) return;
+    if (remember) {
+      localStorage.setItem(STORAGE_KEY_TOKEN, obfuscateToken(token));
+      localStorage.setItem(STORAGE_KEY_ORG, org);
+      localStorage.setItem(STORAGE_KEY_REMEMBER, "1");
+    } else {
+      localStorage.removeItem(STORAGE_KEY_TOKEN);
+      localStorage.removeItem(STORAGE_KEY_ORG);
+      localStorage.removeItem(STORAGE_KEY_REMEMBER);
+    }
+  }, [connected, remember, token, org]);
+
   const disconnect = () => {
     setConnected(false);
     setProjects([]);
@@ -804,6 +848,12 @@ export default function SonarDashboard() {
     setPullRequests({});
     setAnalysisQG({});
     setError(null);
+    localStorage.removeItem(STORAGE_KEY_TOKEN);
+    localStorage.removeItem(STORAGE_KEY_ORG);
+    localStorage.removeItem(STORAGE_KEY_REMEMBER);
+    setRemember(false);
+    setToken(ENV_TOKEN);
+    setOrg(ENV_ORG);
   };
 
   const filtered = projects.filter(p => {
@@ -846,7 +896,7 @@ export default function SonarDashboard() {
             </p>
           </div>
 
-          <div style={{ marginBottom: 22 }}>
+          <div style={{ marginBottom: 14 }}>
             <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 5 }}>
               Clave de organización
             </label>
@@ -858,6 +908,20 @@ export default function SonarDashboard() {
               onKeyDown={e => e.key === "Enter" && handleConnect()}
               style={{ width: "100%" }}
             />
+          </div>
+
+          <div style={{ marginBottom: 22 }}>
+            <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={e => setRemember(e.target.checked)}
+              />
+              Recordar en este navegador
+            </label>
+            <p style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4, opacity: 0.75, marginLeft: 22 }}>
+              Se guarda en localStorage. Token ofuscado (no es cifrado real).
+            </p>
           </div>
 
           {error && (
